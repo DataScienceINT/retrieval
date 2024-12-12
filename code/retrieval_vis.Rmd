@@ -1,0 +1,90 @@
+---
+title: "Retrieval Visualization"
+author: "Marie Corradi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+```
+
+# Load data
+
+```{r}
+general <- read.csv("../results/general_passages.csv")
+bio <- read.csv("../results/bio_passages.csv")
+```
+
+# Compare passages and their ranks between embeddings
+
+```{r}
+top50 <- list()
+bottom10 <- list()
+queries <- as.list(unique(general$query))
+for(q in queries){
+  top50 <- c(top50,length(setdiff(filter(general, query==q& type=="top")$text,filter(bio, query==q& type=="top")$text)))
+  bottom10 <- c(bottom10,length(setdiff(filter(general, query==q& type=="bottom")$text,filter(bio, query==q& type=="bottom")$text)))
+}
+
+compare <- as.data.frame(do.call(cbind,list(queries,top50,bottom10)))%>%
+  rename("query"=V1, "Nr of different passages top 50"=V2, "Nr of different passages bottom10"=V3)
+
+kable(compare, caption="Number of different top and bottom passages using biological or general embeddings")
+```
+
+The top 50 passages are the same no matter what embedding model is used, the bottom 10 can have 1 different passage depending on the query.
+Are the top passages also in the same order?
+
+```{r}
+
+differences <- list()
+
+for(q in queries){
+  diff_indices <- which((filter(general, query==q& type=="top")$text==filter(bio, query==q& type=="top")$text)==F)
+  differences <- c(differences, paste(unlist(diff_indices), collapse='-'))
+}
+
+indices <- as.data.frame(do.call(cbind,list(queries,differences)))%>%
+  rename("query"=V1, "Rank of flipped passages"=V2)
+
+kable(indices, caption="Rank of passages when different using biological or general embeddings")
+```
+
+It seems that when passages are not in the exact same order they are mostly flipped between two consecutive positions (ex: passage 28 with general embeddings becomes passage 29 with biological embeddings - and vice-versa - for the first query).
+
+
+# Check score distributions between queries for each retrieval methods
+
+```{r, fig.width=18, fig.height=15}
+results <- read.csv("../results/results.csv")
+
+sigmoid <- function(x){
+  sig <- 1 / (1 + exp(-x))
+}
+
+results <- results%>%
+  mutate(relevance.score.adjusted = ifelse(method=="cross-encoder", sigmoid(relevance.score), relevance.score))%>%
+  mutate(query=gsub("[Ee]ndoplasmic reticulum", "ER", query))
+
+results %>%
+  ggplot(aes(method,relevance.score.adjusted, fill=method)) +
+  geom_boxplot() +
+  geom_line(aes(group=passage.text), position = position_dodge(0.2)) +
+  geom_point(aes(fill=method,group=passage.text),size=2,shape=21, position = position_dodge(0.2)) +
+  theme(legend.position = "none")+
+  facet_wrap(~query,labeller = labeller(grp = label_wrap_gen()))+
+  theme_classic()+
+  labs(y="Score", title = "Distribution of scores for top 10 passages with different retrieval methods")+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+
+
+Reranking usually leads to a very different top 10 set of passages compared to embedding alone. Colbert tends to attribute higher relevance scores to passages than the cross-encoder.
+
+
+
