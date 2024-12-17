@@ -1,5 +1,6 @@
 import prodigy
 import csv
+import random
 #from prodigy.components.preprocess import add_tokens
 from prodigy.components.stream import Stream
 from prodigy.util import set_hashes
@@ -7,8 +8,11 @@ import spacy
 import copy
 from prodigy.components.routers import full_overlap
 
-@prodigy.recipe("retrieval-validation")
-def retrieval(dataset, source):
+@prodigy.recipe(
+	"retrieval-validation",
+	dataset=("The dataset to use", "positional", None, str),
+    	spacy_model=("The base model", "positional", None, str))
+def retrieval(dataset, source, spacy_model):
     # We can use the blocks to override certain config and content, and set
     # "text": None for the choice interface so it doesn't also render the text
     blocks = [
@@ -23,18 +27,20 @@ def retrieval(dataset, source):
     ]
 
 
-    def custom_csv_loader(source): 
+    def custom_csv_loader(source, encoding='utf-8-sig'): 
         #examples = list()
         with open(source) as csvfile: 
-            reader = csv.DictReader(csvfile) 
-            for row in reader: 
+            reader = csv.DictReader(csvfile)
+            rows = list(reader)  # Load all rows into a list
+            random.shuffle(rows)  # Shuffle the rows 
+            for row in rows: 
                 r_score = row.get('relevance score') 
                 text = row.get('query') + '\n\n' + row.get('passage text')
                 s_score = row.get('similarity score')
                 method = row.get('method')
                 meta = row.get('metadata')
-                type = row.get('type')
-                yield {'text': text, "options": options,'rel_score':r_score,'sim_score':s_score, 'metadata': meta, 'method': method, 'type':type}
+                row_type = row.get('type')
+                yield {'text': text, "options": options,'rel_score':r_score,'sim_score':s_score, 'metadata': meta, 'method': method, 'type':row_type}
         #return examples
 
     def make_tasks(nlp, stream): #, labels
@@ -47,9 +53,6 @@ def retrieval(dataset, source):
             task = copy.deepcopy(eg)
             spans = []
             for ent in doc.ents:
-                # Ignore if the predicted entity is not in the selected labels.
-                #if labels and ent.label_ not in labels:
-                #    continue
                 # Create a span dict for the predicted entity.
                 spans.append(
                     {
@@ -68,7 +71,10 @@ def retrieval(dataset, source):
         
     stream_as_generator = custom_csv_loader(source) #load stream with custom loader
     stream = Stream.from_iterable(stream_as_generator) # convert it into Stream
-    nlp = spacy.load("en_ner_jnlpba_md")                           
+    #if spacy_model is None:
+    #    nlp=spacy.load("en_blank")
+    #else:
+    nlp = spacy.load(spacy_model)
     #stream.apply(add_tokens, nlp=nlp, stream=stream)  # tokenize the stream for ner_manual
     stream.apply(make_tasks, nlp=nlp, stream=stream) 
     #TODO:hierarchy for query as title
@@ -76,10 +82,14 @@ def retrieval(dataset, source):
         "dataset": dataset,          # the dataset to save annotations to
         "view_id": "blocks",         # set the view_id to "blocks"
         "stream": stream,            # the stream of incoming examples
-        "task_router": full_overlap, # all annotators see all examples
+        #"task_router": full_overlap, # all annotators see all examples
+        #"annotations_per_task": 2,
         "config": {
             "labels": [""],
-            "blocks": blocks         # add the blocks to the config
+            "blocks": blocks,
+	    #"custom_theme": {
+            #    "cardMaxWidth": "95%"
+    	    #	}         # add the blocks to the config
         }
     }
 
