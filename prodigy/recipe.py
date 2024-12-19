@@ -22,13 +22,13 @@ def retrieval(dataset, source, spacy_model):
     ]
     options = [
         {"id": 2, "text": "😺 Relevant"},
+        {"id": 3, "text": "😺 Relevant, but secondary evidence"},
         {"id": 1, "text": "🙀 Ambiguous"},
         {"id": 0, "text": "😾 Not relevant"}
     ]
 
 
     def custom_csv_loader(source, encoding='utf-8-sig'): 
-        #examples = list()
         with open(source) as csvfile: 
             reader = csv.DictReader(csvfile)
             rows = list(reader)  # Load all rows into a list
@@ -41,10 +41,9 @@ def retrieval(dataset, source, spacy_model):
                 meta = row.get('metadata')
                 row_type = row.get('type')
                 yield {'text': text, "options": options,'rel_score':r_score,'sim_score':s_score, 'metadata': meta, 'method': method, 'type':row_type}
-        #return examples
 
     def make_tasks(nlp, stream): #, labels
-        #from ner.correct code
+        # Adapted from ner.correct code
         """Add a 'spans' key to each example, with predicted entities."""
         # Process the stream using spaCy's nlp.pipe, which yields doc objects.
         # If as_tuples=True is set, you can pass in (text, context) tuples.
@@ -71,25 +70,17 @@ def retrieval(dataset, source, spacy_model):
         
     stream_as_generator = custom_csv_loader(source) #load stream with custom loader
     stream = Stream.from_iterable(stream_as_generator) # convert it into Stream
-    #if spacy_model is None:
-    #    nlp=spacy.load("en_blank")
-    #else:
+
     nlp = spacy.load(spacy_model)
-    #stream.apply(add_tokens, nlp=nlp, stream=stream)  # tokenize the stream for ner_manual
     stream.apply(make_tasks, nlp=nlp, stream=stream) 
-    #TODO:hierarchy for query as title
+
     return {
-        "dataset": dataset,          # the dataset to save annotations to
-        "view_id": "blocks",         # set the view_id to "blocks"
-        "stream": stream,            # the stream of incoming examples
-        #"task_router": full_overlap, # all annotators see all examples
-        #"annotations_per_task": 2,
+        "dataset": dataset,         
+        "view_id": "blocks",         
+        "stream": stream,            
         "config": {
             "labels": [""],
-            "blocks": blocks,
-	    #"custom_theme": {
-            #    "cardMaxWidth": "95%"
-    	    #	}         # add the blocks to the config
+            "blocks": blocks
         }
     }
 
