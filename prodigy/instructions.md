@@ -1,3 +1,8 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
 # Instructions to use Prodigy to annotate relevance of text
 
 ## Prodigy - the interface
